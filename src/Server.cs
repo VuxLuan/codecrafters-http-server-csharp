@@ -43,12 +43,17 @@ static void HandleRequest(Socket socket)
 
         var response = new HttpResponse
         {
-            StatusCode = 200,
-            ReasonPhrase = "OK",
-            Body = httpRequest.Uri.Replace("/echo/", "")
+            Body = httpRequest.Uri.Replace("/echo/", ""),
         };
-        response.Headers["Content-Type"] = "text/plain";
-        response.Headers["Content-Length"] = response.Body?.Length.ToString() ?? "0";
+        socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
+    }
+
+    if (httpRequest.Uri == "/user-agent")
+    {
+        var response = new HttpResponse
+        {
+            Body = httpRequest.Headers["User-Agent"],
+        };
         socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
     }
     else
