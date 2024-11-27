@@ -15,9 +15,8 @@ while (true)
 {
     try
     {
-        using Socket clientSocket = server.AcceptSocket();
-        HandleRequest(clientSocket);
-        clientSocket.Close();
+        Socket clientSocket = await server.AcceptSocketAsync();
+        _ = Task.Run(() => HandleRequest(clientSocket));
 
     }
     catch (Exception e)
@@ -29,6 +28,8 @@ while (true)
 
 static void HandleRequest(Socket socket)
 {
+    try
+    {
     var buffer = new byte[4096];
     var bytesRead = socket.Receive(buffer);
 
@@ -59,6 +60,15 @@ static void HandleRequest(Socket socket)
     else
     {
         socket.Send("HTTP/1.1 404 Not Found\r\n\r\n"u8.ToArray());
+    }
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine($"Error handling request: {e.Message}");
+    }
+    finally
+    {
+        socket.Close();
     }
 }
 
