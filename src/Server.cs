@@ -26,41 +26,65 @@ while (true)
     }
 }
 
-static void HandleRequest(Socket socket)
+void HandleRequest(Socket socket)
 {
     try
     {
-    var buffer = new byte[4096];
-    var bytesRead = socket.Receive(buffer);
+        var buffer = new byte[4096];
+        var bytesRead = socket.Receive(buffer);
 
-    var httpRequest = HttpRequest.ParseHttpRequest(buffer[..bytesRead]);
-    if (httpRequest.Uri == "/")
-    {
-        socket.Send("HTTP/1.1 200 OK\r\n\r\n"u8.ToArray());
-    }
-
-    if (httpRequest.Uri.Contains("/echo/"))
-    {
-
-        var response = new HttpResponse
+        var httpRequest = HttpRequest.ParseHttpRequest(buffer[..bytesRead]);
+        if (httpRequest.Uri == "/")
         {
-            Body = httpRequest.Uri.Replace("/echo/", ""),
-        };
-        socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
-    }
+            socket.Send("HTTP/1.1 200 OK\r\n\r\n"u8.ToArray());
+        }
 
-    if (httpRequest.Uri == "/user-agent")
-    {
-        var response = new HttpResponse
+        if (httpRequest.Uri.Contains("/echo/"))
         {
-            Body = httpRequest.Headers["User-Agent"],
-        };
-        socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
-    }
-    else
-    {
-        socket.Send("HTTP/1.1 404 Not Found\r\n\r\n"u8.ToArray());
-    }
+
+            var response = new HttpResponse
+            {
+                Body = httpRequest.Uri.Replace("/echo/", ""),
+            };
+            socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
+        }
+
+        if (httpRequest.Uri == "/user-agent")
+        {
+            var response = new HttpResponse
+            {
+                Body = httpRequest.Headers["User-Agent"],
+            };
+            socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
+        }
+
+        if (httpRequest.Uri.Contains("/files/"))
+        {
+            var fileName = httpRequest.Uri.Replace("/files/", "").Trim();
+            var filePath = Path.Combine(args[1], fileName);
+            if (!File.Exists(filePath))
+            {
+                socket.Send("HTTP/1.1 404 Not Found\r\n\r\n"u8.ToArray());
+            }
+            var fileBytes = File.ReadAllBytes(filePath);
+            var response = new HttpResponse
+            {
+                Headers =
+                {
+                    ["Content-Length"] = fileBytes.Length.ToString(),
+                    ["Content-Type"] = "application/octet-stream"
+                },
+                Body = Encoding.UTF8.GetString(fileBytes),
+            };
+            
+            socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
+            
+            
+        }
+        else
+        {
+            socket.Send("HTTP/1.1 404 Not Found\r\n\r\n"u8.ToArray());
+        }
     }
     catch (Exception e)
     {
