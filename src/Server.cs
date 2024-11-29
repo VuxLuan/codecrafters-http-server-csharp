@@ -16,7 +16,7 @@ while (true)
     try
     {
         Socket clientSocket = await server.AcceptSocketAsync();
-        _ = Task.Run(() => HandleRequest(clientSocket));
+        _ = Task.Run(() => HandleRequestAsync(clientSocket));
 
     }
     catch (Exception e)
@@ -26,27 +26,27 @@ while (true)
     }
 }
 
-void HandleRequest(Socket socket)
+async Task HandleRequestAsync(Socket socket)
 {
     try
     {
-        var buffer = new byte[4096];
-        var bytesRead = socket.Receive(buffer);
+        var buffer = new byte[1024];
+        var bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.None);
 
         var httpRequest = HttpRequest.ParseHttpRequest(buffer[..bytesRead]);
+        
         if (httpRequest.Uri == "/")
         {
-            socket.Send("HTTP/1.1 200 OK\r\n\r\n"u8.ToArray());
+            await socket.SendAsync(new ArraySegment<byte>("HTTP/1.1 200 OK\r\n\r\n"u8.ToArray()), SocketFlags.None);
         }
 
-        if (httpRequest.Uri.Contains("/echo/"))
+        if (httpRequest.Uri.StartsWith("/echo/"))
         {
-
             var response = new HttpResponse
             {
                 Body = httpRequest.Uri.Replace("/echo/", ""),
             };
-            socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
+            await socket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(response.ToString())), SocketFlags.None);
         }
 
         if (httpRequest.Uri == "/user-agent")
@@ -55,18 +55,19 @@ void HandleRequest(Socket socket)
             {
                 Body = httpRequest.Headers["User-Agent"],
             };
-            socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
+            await socket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(response.ToString())), SocketFlags.None);
         }
 
-        if (httpRequest.Uri.Contains("/files/"))
+        if (httpRequest.Method == "GET" && httpRequest.Uri.StartsWith("/files/"))
         {
             var fileName = httpRequest.Uri.Replace("/files/", "").Trim();
             var filePath = Path.Combine(args[1], fileName);
             if (!File.Exists(filePath))
             {
-                socket.Send("HTTP/1.1 404 Not Found\r\n\r\n"u8.ToArray());
+                await socket.SendAsync(new ArraySegment<byte>("HTTP/1.1 404 Not Found\r\n\r\n"u8.ToArray()), SocketFlags.None);
+                return;
             }
-            var fileBytes = File.ReadAllBytes(filePath);
+            var fileBytes = await File.ReadAllBytesAsync(filePath);
             var response = new HttpResponse
             {
                 Headers =
@@ -77,13 +78,26 @@ void HandleRequest(Socket socket)
                 Body = Encoding.UTF8.GetString(fileBytes),
             };
             
-            socket.Send(Encoding.UTF8.GetBytes(response.ToString()));
-            
-            
+            await socket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(response.ToString())), SocketFlags.None);
+        }
+
+        if (httpRequest.Method == "POST" && httpRequest.Uri.StartsWith("/files/"))
+        {
+            var fileName = httpRequest.Uri.Replace("/files/", "").Trim();
+            var filePath = Path.Combine(args[1], fileName);
+            if (string.IsNullOrWhiteSpace(httpRequest.Body))
+            {
+                await socket.SendAsync("HTTP/1.1 400 Bad Request\r\n\r\n"u8.ToArray());
+                return;
+            }
+            var fileContents = Encoding.UTF8.GetBytes(httpRequest.Body);
+            await File.WriteAllBytesAsync(filePath, fileContents);
+            await socket.SendAsync("HTTP/1.1 201 Created\r\n\r\n"u8.ToArray());
+
         }
         else
         {
-            socket.Send("HTTP/1.1 404 Not Found\r\n\r\n"u8.ToArray());
+            await socket.SendAsync(new ArraySegment<byte>("HTTP/1.1 404 Not Found\r\n\r\n"u8.ToArray()), SocketFlags.None);
         }
     }
     catch (Exception e)
