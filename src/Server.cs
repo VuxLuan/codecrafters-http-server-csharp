@@ -34,18 +34,24 @@ async Task HandleRequestAsync(Socket socket)
         var bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.None);
 
         var httpRequest = HttpRequest.ParseHttpRequest(buffer[..bytesRead]);
+
+        
         
         if (httpRequest.Uri == "/")
         {
             await socket.SendAsync(new ArraySegment<byte>("HTTP/1.1 200 OK\r\n\r\n"u8.ToArray()), SocketFlags.None);
         }
 
-        if (httpRequest.Uri.StartsWith("/echo/"))
+        if (httpRequest.Uri.StartsWith("/echo/") )
         {
-            var response = new HttpResponse
+            var response = new HttpResponse();
+            if (httpRequest.Headers.TryGetValue("Accept-Encoding", out string? value) && value.Contains("gzip"))
             {
-                Body = httpRequest.Uri.Replace("/echo/", ""),
-            };
+                response.Headers["Content-Encoding"] = "gzip";
+            }
+
+            response.Body = httpRequest.Uri.Replace("/echo/", "");
+            
             await socket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(response.ToString())), SocketFlags.None);
         }
 
@@ -92,7 +98,7 @@ async Task HandleRequestAsync(Socket socket)
             }
             var fileContents = Encoding.UTF8.GetBytes(httpRequest.Body);
             await File.WriteAllBytesAsync(filePath, fileContents);
-            await socket.SendAsync("HTTP/1.1 201 Created\r\n\r\n"u8.ToArray());
+            await socket.SendAsync(new ArraySegment<byte>("HTTP/1.1 201 Created\r\n\r\n"u8.ToArray()), SocketFlags.None);
 
         }
         else
