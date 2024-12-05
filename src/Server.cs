@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -45,14 +46,20 @@ async Task HandleRequestAsync(Socket socket)
         if (httpRequest.Uri.StartsWith("/echo/") )
         {
             var response = new HttpResponse();
-            if (httpRequest.Headers.TryGetValue("Accept-Encoding", out string? value) && value.Contains("gzip"))
+            var input =  httpRequest.Uri.Replace("/echo/", "");
+            if (httpRequest.Headers.TryGetValue("Accept-Encoding", out string? encoding) && encoding.Contains("gzip"))
             {
                 response.Headers["Content-Encoding"] = "gzip";
+                response.CompressedBody = CompressStringToGzip(input);
+            }
+            else
+            {
+                response.Body = input;
             }
 
-            response.Body = httpRequest.Uri.Replace("/echo/", "");
+            await socket.SendAsync(new ArraySegment<byte>(response.ToByteArray()), SocketFlags.None);
             
-            await socket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(response.ToString())), SocketFlags.None);
+           
         }
 
         if (httpRequest.Uri == "/user-agent")
@@ -116,7 +123,14 @@ async Task HandleRequestAsync(Socket socket)
     }
 }
 
-
-
-
+byte[] CompressStringToGzip(string data)
+{
+    using var output = new MemoryStream();
+    using (var gzip = new GZipStream(output, CompressionMode.Compress, true))
+    {
+        var bytes = Encoding.UTF8.GetBytes(data);
+        gzip.Write(bytes, 0, bytes.Length);
+    }
+    return output.ToArray();
+}
 
